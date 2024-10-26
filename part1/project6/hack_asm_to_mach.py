@@ -84,6 +84,7 @@ outName = "Pong.hack"
 a_lables = {}
 a_vars = {}
 var_addr = 16
+
 # pass 1: find lables
 with open(fileName, "r") as prg:
     count = 0
@@ -98,7 +99,7 @@ with open(fileName, "r") as prg:
             count += 1
 
 
-# pass 2: replace labes
+# pass 2: replace symbols (pre-defined, lables, variables)
 with open(fileName, "r") as prg:
     with open("prgL.asm", "w") as prgL: 
         for line in prg:
@@ -125,7 +126,7 @@ with open(fileName, "r") as prg:
             
             prgL.write(line + "\n")
 
-
+# convert asm to machine code; asm -> hack
 with open("prgL.asm", "r") as asm:
     with open(outName, "w") as hack:
         for line in asm:
