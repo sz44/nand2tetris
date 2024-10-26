@@ -1,0 +1,97 @@
+// This file is part of www.nand2tetris.org
+// and the book "The Elements of Computing Systems"
+// by Nisan and Schocken, MIT Press.
+// File name: projects/5/CPU.hdl
+/**
+ * The Hack Central Processing unit (CPU).
+ * Parses the binary code in the instruction input and executes it according to the
+ * Hack machine language specification. In the case of a C-instruction, computes the
+ * function specified by the instruction. If the instruction specifies to read a memory
+ * value, the inM input is expected to contain this value. If the instruction specifies
+ * to write a value to the memory, sets the outM output to this value, sets the addressM
+ * output to the target address, and asserts the writeM output (when writeM = 0, any
+ * value may appear in outM).
+ * If the reset input is 0, computes the address of the next instruction and sets the
+ * pc output to that value. If the reset input is 1, sets pc to 0.
+ * Note: The outM and writeM outputs are combinational: they are affected by the
+ * instruction's execution during the current cycle. The addressM and pc outputs are
+ * clocked: although they are affected by the instruction's execution, they commit to
+ * their new values only in the next cycle.
+ */
+CHIP CPU {
+
+    IN  inM[16],         // M value input  (M = contents of RAM[A])
+        instruction[16], // Instruction for execution
+        reset;           // Signals whether to re-start the current
+                         // program (reset==1) or continue executing
+                         // the current program (reset==0).
+
+    OUT outM[16],        // M value output
+        writeM,          // Write to M? 
+        addressM[15],    // Address in data memory (of M)
+        pc[15];          // address of next instruction
+
+    PARTS:
+    // if op A write to regA or if dst A write to regA
+    Not(in=instruction[15] , out=Aop );
+    Or(a=Aop , b=instruction[5] , out=AregLoad );
+    ARegister(in=regAin , load=AregLoad , out=regAout );
+    //Register(in=regAin , load=AregLoad , out=regAout );
+    
+    // if op A out instruction; if op C out ALUout
+    Mux16(a=instruction , b=ALUout , sel=instruction[15] , out=regAin );
+    
+    // if dst is D and op C
+    And(a=instruction[4] , b=instruction[15] , out=Dload );
+    DRegister(in=ALUout , load=Dload , out=regDout );
+    //Register(in=ALUout , load=Dload , out=regDout );
+    
+    // if computation on M, send inM to ALU; elseif on A send regAout to ALU;
+    Mux16(a=regAout , b=inM , sel=instruction[12] , out=AMout );
+    
+    ALU(x=regDout , y=AMout , zx=instruction[11] , nx=instruction[10] , zy=instruction[9] , ny=instruction[8] , f=instruction[7] , no=instruction[6] , out=ALUout , zr=zrout , ng=ngout );
+
+    // if dst is M send ALUout to outM
+    Mux16(a=false , b=ALUout , sel=instruction[3] , out=outM );
+    
+    // addressM
+    //Mux16(a=false , b=regAout , sel=instruction[3] , out[0..14]=addressM );
+    And16(a=true , b=regAout , out[0..14]=addressM );
+
+    // if op C and dst is M send to writeM
+    And(a=instruction[15] , b=instruction[3] , out=writeM);
+    
+    // load conditions
+    // 001 JGT
+    Not(in=zrout , out=notzr );
+    Not(in=ngout , out=notng );
+    And(a=notzr , b=notng , out=gt );
+    And(a=gt , b=instruction[0] , out=jgt );
+    // 010 JEQ
+    And(a=instruction[1] , b=zrout , out=jeq );
+    // 011 JGE
+    Or(a=jgt , b=jeq , out=jge );
+    // 100 JLT
+    And(a=instruction[2] , b=ngout , out=jlt );
+    // 101 JNE
+    And(a=instruction[0] , b=instruction[2] , out=ins02 );
+    And(a=ins02 , b=notzr , out=jne );
+    // 110 JLE
+    Or(a=jlt , b=jeq , out=jle );
+    // 111 JMP
+    And(a=instruction[0] , b=instruction[1] , out=ins01 );
+    And(a=ins01 , b=instruction[2] , out=jmp );
+    
+    Or(a=jgt , b=jeq , out=o1 );
+    Or(a=o1 , b=jge , out=o2 );
+    Or(a=o2 , b=jlt , out=o3 );
+    Or(a=o3 , b=jne , out=o4 );
+    Or(a=o4 , b=jle , out=o5 );
+    Or(a=o5 , b=jmp , out=o6 );
+
+    // And op is c
+    And(a=o6 , b=instruction[15] , out=loadc );
+
+    // if reset pc = 0; elif load pc=regA; else inc++
+    PC(in=regAout , load=loadc , inc=true , reset=reset , out[0..14]=pc );
+}
